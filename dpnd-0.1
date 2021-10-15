@@ -1,0 +1,393 @@
+#!/usr/bin/python3
+"""
+The MIT License
+
+Copyright (c) 2017, 2018, 2019, 2020, 2021 Trenton Henry <trenton@trentonhenry.com>.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+DPND
+
+dpnd is a tool to manage gathering the correct sources of the correct versions in the correct places.
+It doesn't build anything, and it doesn't understand version control.
+All it does is populate a directory tree with the required versions of the required components as specified in a bill of materials.
+It is called dpnd for 'depend', or possibly 'off the deep end'...
+
+dpnd implements flat modularization.
+
+BACKGROUND
+A component is a folder containing source code files.
+These files are concerned with the implementation of some form of computation.
+Some components are reusable “libraries”, some are “applications”, and some are “utilities”.
+Essentially, a component is an independently versioned collection of related files.
+
+There are three separate topics involved:
+* Release management; how to name releases so that external consumers and internal developers understand them.
+* Repository management; how to version components so that internal developers understand them.
+* Dependency management; how to ensure that the dependencies of a project are present, and buildable, at the correct version.
+
+These are related but distinct topics that deserve mention.
+
+Release management is about delivering revisions of components to customers.
+The component names include version numbers that follow a commonly accepted, and reasonably meaningful, scheme.
+This is referred to as the *marketing revision.*
+Note that the marketing revision number is part of the component name, and has nothing whatsoever to do with repository management.
+The marketing revision is for external use by the customers of the components.
+Each marketing release of a given component coexists side by side with other releases.
+E.g., thingy-11.8, thingy-11.9,  thingy-12.0
+The reason for this is simply due to the fact that multiple applications may depend on the same component, but at different revision levels.
+It is not reasonable to expect all clients of a component to upgrade to the latest marketing revision.
+In fact, it may not even be possible given the fact that product may already be in the field.
+Therefore each new marketing revision is intended to be installed in parallel with previous releases of the same component.
+dpnd doesn't know anything about release management.
+
+Repository management is about gathering the correct sources of the correct versions in the correct places.
+It is about managing repositories internally, leading from one release to the next.
+There is often a progression of unreleased versions between released versions.
+For example, when working towards a release, say 1.0, there are normally multiple drafts leading up to that release.
+These drafts take place on the repository of the component using various branching and other strategies.
+dpnd couldn't care less about any of that and doesn't know anything about repository management.
+
+Dependency management is about gathering the correct sources of the correct versions in the correct places so that they can be built.
+In order to actually build things, regardless of build system, it is necessary to ensure that all of the dependencies of a given
+component are present in the filesystem at the appropriate location and contain the correct revision/tag of the code.
+(Remember that the marketing version number is entirely independent of the version control revision, specifically the tag.
+They may appear similar, but they are different things.)
+This, specifically, is the only thing that dpnd aspires to do.
+It implements flat modularization and ensures that the required versions of the required components exist.
+
+Flat modularization means that all components reside in the file system at the same level, as siblings.
+Each component contains a file named _dpnd whose content represents the dependencies of the component.
+(Components with no dependencies on other components don't have a _dpnd file.)
+The _dpnd file is a bill of materials, describing the component and any components that it itself depends on.
+
+INSTALLATION
+* dpnd is a Python3 script, so you need Python3.
+* You need to copy it to somewhere on your path.
+* And you need to make sure it is executable, like: chmod 755 dpnd-0.1
+* And you should alias dpnd to the version you are using like: ln dpnd-0.1 dpnd
+* Now you can just run dpnd instead of dpnd-0.1
+* When I ineveitably send an update, say dpnd-0.2, all you need to do is: ln dpnd-0.2 dpnd
+* For the examples described here the expectation is that your tree looks like the following:
+
+    repos/
+    repos/myapp/latest
+    repos/somecmp/someref
+    ...
+
+EXAMPLE: STARTING FROM NOTHING
+Let's create a new application, called myapp, that depends on some components.
+Create a new empty repository.
+
+    cd repos (wherever your repos live)
+    mkdir myapp
+    git init myapp/latest
+    cd myapp/latest
+
+Now add some components to the bill of materials.
+To do this, use:
+
+    dpnd require ...
+
+The require command adds a component to the bill of materials.
+If no bill of materials exists, a new one is created.
+If one already exists, it is updated.
+The parameters are:
+* cmp - the component name
+* url - the url to obtain the component contents via git
+* ref - the reference to fetch; git sha, tags/sometag, branch
+* dir - the name of the folder within the component for this ref
+* depth - the history to fetch, 0 for all, > 0 for a limited history depth
+
+Example using pretend <url>s for stuff that I ... don't actually use ...
+
+    cd myapp/latest
+    dpnd require my_scripts <url> tags/BuildScriptsv1.3 v1.3 0
+    dpnd require bullseye <url> master latest 1
+    dpnd require cmsis <url> tags/Cmsisv4.5.0_v1.3 v4.5.0-1.3 1
+    dpnd require fff <url> 04cbd78260f1ebb01c6eb3e878afc4986dc7ffba latest 1
+    dpnd require googletest <url> tags/GoogleTestv1.8.0 v1.8.0 1
+
+Now the bill of materials, in the _dpnd file, exist and describe myapp's dependencies.
+
+To actually populate the directory tree with the required files, use:
+
+    dpnd populate
+
+Upon completion, the following folders will exist, containing the files specified in the bill of materials.
+Remember, the current working directory is still myapp/latest.
+
+    ../../my_scripts/v1.3.0/
+    ../../bullseye/latest/
+    ../../cmsis/v4.5.0-1.3/
+    ../../fff/latest/
+    ../../googletest/v1.8.0/
+
+So from the 'top level' the layout is:
+
+    myapp/
+    my_scripts/
+    bullseye/
+    cmsis/
+    fff/
+    googletest/
+
+And, of course, inside each of those top level component folders are one or more version folders, as required.
+Keep in mind that there might be more than one project, or application within a project, that requires some component.
+You don't want to have to upgrade older shipping projects to use new versions of components just because there are new versions.
+Instead, you want them to keep building at the component versions that they were released with.
+So you will end up with several versions of the same component.
+But you will only have one copy of each version of each component, not multiple copies like you would with hierarchical modularization.
+
+In these examples, the full history of my_scripts is fetched, but only one level of history is fetched for cmsis etc.
+If you want the full history, use 0 for the depth parameter.
+It isn't a big deal, but it can save space and time to limit the history of big repos.
+
+Also, keep in mind that dpnd implements flat modularization.
+I.e., all components (including apps and libs) are at the same level, siblings, in the tree.
+You could mess with that and put things at various levels but then you'd be likely to end up with multiple copies of the same versions of things.
+
+Ok, so what if one of the components in turn requires other components?
+In that case the component itself will contain its own _dpnd file.
+So dpnd recursively populates those dependencies.
+
+EXAMPLE: RECURSIVE DEPENDENCIES
+To demonstrate recursive dependencies, consider this (remember, the current working directory is still myapp/latest):
+
+    cd ../../bullseye/latest
+    dpnd require my_scripts <url> tags/BuildScriptsv1.0 v1.0 0
+
+    cd ../../cmsis/v4.5.0-1.3
+    dpnd require my_scripts <url> tags/BuildScriptsv1.1 v1.1 0
+
+    cd ../../googletest/v1.8.0
+    dpnd require my_scripts <url> tags/BuildScriptsv1.2 v1.2 0
+
+This causes several components to depend on different versions on my_scripts.
+When again you do:
+
+    cd ../../myapp/latest
+    dpnd populate
+
+You wind up with:
+    ../../my_scripts/v1.0.0/
+    ../../my_scripts/v1.1.0/
+    ../../my_scripts/v1.2.0/
+    ../../my_scripts/v1.3.0/
+
+Ok, so in practice you wouldn't want a build that uses several versions of the same thing.
+Likely you'd get errors.
+But you might have several different builds that each use different versions of the same thing.
+E.g., myapp-1.0 maybe used thingy-1.1 when it was released.
+But myapp-1.1 might use thingy-1.2.
+You have to support both builds, so you need to deal with having both versions on the filesystem.
+
+As a general rule, you should not modify any of component versions except for latest.
+
+GRAY AREAS
+[] Currently populate always does the fetch. TBD: make it check if there is no need.
+[] If you are working in something/latest and you do a populate for something else, and no checking is done, the fetch might do something ugly?
+[] The sorts of refs you can use with the require command need to be thought through; maybe some things need more effort?
+[] Other stuff I didn't think of...
+
+"""
+
+import os
+import sys
+import json
+
+# true makes it print wiat it wants to do without actually doing it
+dryrun = False
+#dryrun = True
+
+dpnd_root = "../../"
+
+class attr:
+    norm = '\033[0m'
+    bold = '\033[1m'
+    italic = '\033[3m'
+    uline = '\033[4m'
+    inverse = '\033[7m'
+    strike = '\033[9m'
+    nbold = '\033[22m'
+    nitalic = '\033[23m'
+    nuline = '\033[24m'
+    ninverse = '\033[27m'
+    nstrike = '\033[29m'
+    k = '\033[30m'
+    r = '\033[31m'
+    g = '\033[32m'
+    y = '\033[33m'
+    b = '\033[34m'
+    m = '\033[35m'
+    c = '\033[36m'
+    w = '\033[37m'
+    d = '\033[39m' # default
+    bgk = '\033[40m'
+    bgr = '\033[41m'
+    bgg = '\033[42m'
+    bgy = '\033[43m'
+    bgb = '\033[44m'
+    bgm = '\033[45m'
+    bgc = '\033[46m'
+    bgw = '\033[47m'
+    bgd = '\033[49m'
+    k = '\033[30m'
+#    violet = '\033[95m'
+#    cyan = '\033[96m'
+#    darkcyan = '\033[36m'
+#    blue = '\033[94m'
+#    green = '\033[92m'
+#    yellow = '\033[93m'
+#    red = '\033[91m'
+
+def message(msg):
+    print(attr.bold + attr.g + "dpnd -- " + attr.k + msg + attr.norm);
+
+def error(msg):
+    print(attr.bold + attr.r + "dpnd -- ERROR " + attr.k + msg + attr.norm);
+    sys.exit(-1)
+
+def mkdir(path):
+    if not os.path.exists(path):
+        message("mkdir " + attr.g + path)
+        os.mkdir(path)
+        return True
+    else:
+        return False
+
+def read_bom_file():
+    bom = {}
+    if os.path.exists("_dpnd"):
+        with open("_dpnd", 'r') as bomfile:
+            bom = json.load(bomfile)
+    return bom
+
+def write_bom_file(bom):
+    j = json.dumps(bom, indent=4)
+    f = open("_dpnd", "w")
+    f.write(j)
+    f.close()
+
+# I imagine the possibility of multiple backends; git, hg, svn, ... but that is kind of irrelevant at the moment
+def backend_populate_cmp(cmp, url, ref, dir, depth):
+    this_path = os.path.join(os.getcwd(), cmp)
+    mkdir(this_path)
+    this_path = os.path.join(this_path, dir)
+    mkdir(this_path)
+    message("visiting " + this_path)
+    os.chdir(this_path)
+    if not os.path.exists('.git'):
+        # make a new blank repository in the current directory
+        message('git init')
+        os.system('git init')
+        # add a remote
+        message("git remote add origin " + url)
+        if not dryrun:
+            os.system('git remote add origin ' + url)
+    # fetch a ref of interest
+    # the full history up to this commit will be retrieved unless limited via '--depth=...' or '--shallow-since=...'
+    if depth > 0:
+        message('git fetch origin ' + ref + ' --depth=' + str(depth))
+        if not dryrun:
+            os.system('git fetch origin ' + ref + ' --depth=' + str(depth))
+    else:
+        message('git fetch origin ' + ref)
+        if not dryrun:
+            os.system('git fetch origin ' + ref)
+    # reset this repository's master branch to the commit of interest
+    message('git reset --hard FETCH_HEAD')
+    if not dryrun:
+        os.system('git reset --hard FETCH_HEAD')
+
+def populate_cmp(cmp, url, ref, dir, depth):
+    cwd = os.getcwd()
+    os.chdir(dpnd_root)
+    backend_populate_cmp(cmp, url, ref, dir, depth)
+    bom = read_bom_file()
+    populate_bom(bom)
+    os.chdir(cwd)
+
+def populate_bom(bom):
+    for k, v in bom.items():
+        if k != "SELF":
+            depth = 0
+            if "depth" in v:
+                depth = v['depth']
+            populate_cmp(k, v['url'], v['ref'], v['dir'], depth)
+
+def populate():
+    bom = read_bom_file()
+    populate_bom(bom)
+
+def do_require_cmp(url, ref, dir, depth):
+    cmpdict = {}
+    cmpdict["url"] = url; # where to fetch from
+    cmpdict["ref"] = ref; # what ref to fetch; a "sha", or "tags/some-tag"
+    cmpdict["dir"] = dir; # name of dir to fetch the ref into
+    cmpdict["depth"] = depth; # 0 for full history, >0 for limited history
+    return cmpdict
+
+def do_require(cmp, url, ref, dir, depth):
+    message("require " + cmp + "/" + dir);
+    bom = read_bom_file()
+    bom['SELF'] = do_require_cmp("", "latest", "latest", 0)
+    bom[cmp] = do_require_cmp(url, ref, dir, int(depth))
+    write_bom_file(bom)
+    return bom
+
+def require():
+    # If we decide to use this script then this arg checking will have to evolve.
+    if len(sys.argv) < 6:
+        error("missing arguments. Use: " + attr.b + "dpnd require cmp url ref dir depth")
+    return do_require(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+
+def main():
+    verb = sys.argv[1]
+    verbs = {
+        "require": require,
+        "populate": populate,
+        }
+    verbs.get(verb, lambda: error("Invalid verb"))()
+
+is_imported = False
+if __name__ != "__main__":
+    is_imported = True
+
+main()
+
+"""
+import trace
+
+# create a Trace object, telling it what to ignore, and whether to
+# do tracing or line-counting or both.
+tracer = trace.Trace(
+    ignoredirs=[sys.prefix, sys.exec_prefix],
+    trace=0,
+    count=1)
+
+# run the new command using the given tracer
+tracer.run('main()')
+
+# make a report, placing output in the current directory
+r = tracer.results()
+r.write_results(show_missing=True, coverdir=".")
+"""
+
+# eof
