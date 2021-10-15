@@ -80,10 +80,7 @@ The _dpnd file is a bill of materials, describing the component and any componen
 INSTALLATION
 * dpnd is a Python3 script, so you need Python3.
 * You need to copy it to somewhere on your path.
-* And you need to make sure it is executable, like: chmod 755 dpnd-0.1
-* And you should alias dpnd to the version you are using like: ln dpnd-0.1 dpnd
-* Now you can just run dpnd instead of dpnd-0.1
-* When I ineveitably send an update, say dpnd-0.2, all you need to do is: ln dpnd-0.2 dpnd
+* And you need to make sure it is executable, like: chmod 755 dpnd
 * For the examples described here the expectation is that your tree looks like the following:
 
     repos/
